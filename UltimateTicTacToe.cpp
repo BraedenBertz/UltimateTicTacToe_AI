@@ -1,11 +1,11 @@
 #include <windows.h>
-#include <random>
 #include "board.h"
 
 // The main window class name.
 static TCHAR szWindowClass[] = _T("DesktopApp");
+int __size = 3;//size of the board (__size x __size boards in a cell)
 int moves = 0;
-int __size = 3;
+int aiDepth = 7;//depth ai will evaluate for
 Board board(__size);
 
 // The string that appears in the application's title bar.
@@ -119,14 +119,17 @@ int WINAPI WinMain(
 }
 
 
+/*
+* A utility function that prints to the console the current board position
+* mainly for debugging
+* 
+* @param: Board* b: a pointer to the board we want to print
+*/
 void printBoard(Board* b) {
     for (auto i = 0; i < __size * __size; i++) {
         for (auto y = 0; y < __size * __size; y++) {
             std::cout << (b->smallBoard[i][y] == 1 ? 'x' : (b->smallBoard[i][y] == -1 ? 'o' : '*'));
             if ((y + 1) % __size == 0) { std::cout << "|"; }
-            {
-
-            }
         }
         std::cout << std::endl;
         if ((i+1) % __size == 0) { std::cout << "---------------" << std::endl; }
@@ -136,8 +139,8 @@ void printBoard(Board* b) {
 /*
     * Function that updates the GUI board for the user
     *
-    * RETURN: void
-    * PARAM: HDC hdc : a handle to the device context that we will draw upon
+    * @param: HDC hdc : a handle to the device context that we will draw upon
+    * @param: Board* b: a pointer to the board we will use for the gui
     */
 void drawBoard(HDC hdc, Board* b) {
     Gdiplus::Graphics gf(hdc);
@@ -152,27 +155,21 @@ void drawBoard(HDC hdc, Board* b) {
     gf.FillRectangle(&mySolidBrush, b->validX * offset, b->validY * offset, offset, offset);
 
     //Draw the BIG Xs and BIG Os on the board
-    for (auto y = 0; y < n; y++)
-    {
-        for (auto x = 0; x < n; x++)
-        {
+    for (auto y = 0; y < n; y++) {
+        for (auto x = 0; x < n; x++) {
             if (b->bigBoard[y][x] == 1) {
-
                 gf.DrawLine(&pen, x * offset, y * offset, (x + 1) * offset, (y + 1) * offset);
                 gf.DrawLine(&pen, x * offset, (y + 1) * offset, (x + 1) * offset, y * offset);
             }
-            else if (b->bigBoard[y][x] == -1)
-            {
+            else if (b->bigBoard[y][x] == -1) {
                 gf.DrawEllipse(&pen, x * offset, y * offset, offset, offset);
             }
         }
     }
 
     //Sequester into nths
-    for (auto j = 0; j <= n; j++)
-    {
-        for (auto i = 0; i <= n; i++)
-        {
+    for (auto j = 0; j <= n; j++) {
+        for (auto i = 0; i <= n; i++) {
             gf.DrawLine(&pen, i * offset, 0, i * offset, j * 500 / n);
             gf.DrawLine(&pen, 0, j * offset, i * 500 / n, j * offset);
         }
@@ -181,12 +178,9 @@ void drawBoard(HDC hdc, Board* b) {
     //sequester into n^2ths
     pen.SetWidth(1);
     offset =  500 / (n * n);
-    for (auto j = 0; j < (n * n); j++)
-    {
-        for (auto i = 0; i < (n * n); i++)
-        {
-            if (i % n == 0 || j % n == 0)
-            {
+    for (auto j = 0; j < (n * n); j++) {
+        for (auto i = 0; i < (n * n); i++) {
+            if (i % n == 0 || j % n == 0) {
                 continue;
             }
             gf.DrawLine(&pen, i * offset, 0, i * offset, j * 500 / n);
@@ -194,17 +188,14 @@ void drawBoard(HDC hdc, Board* b) {
         }
     }
 
-    //Go and draw the xs and os
-    for (auto y = 0; y < (n * n); y++)
-    {
-        for (auto x = 0; x < (n * n); x++)
-        {
+    //Go and draw the xs and os on the smallboards
+    for (auto y = 0; y < (n * n); y++) {
+        for (auto x = 0; x < (n * n); x++) {
             if (b->smallBoard[y][x] == 1) {
                 gf.DrawLine(&pen, x * offset, y * offset, (x + 1) * offset, (y + 1) * offset);
                 gf.DrawLine(&pen, x * offset, (y + 1) * offset, (x + 1) * offset, y * offset);
             }
-            else if (b->smallBoard[y][x] == -1)
-            {
+            else if (b->smallBoard[y][x] == -1) {
                 gf.DrawEllipse(&pen, x * offset, y * offset, offset, offset);
             }
         }
@@ -212,103 +203,100 @@ void drawBoard(HDC hdc, Board* b) {
     b->player_one_turn = !b->player_one_turn;
 }
 
+/*
+* Statically evaluate the position of the board
+* Positive indicates an advantage positionwise to X
+* Negative indicates an advantage positionwise to O
+* 0 indicaates neutral position
+* 
+* @param: Board* b: a pointer to the board we will evaluate
+* @return: the numerical position evaluation of the board
+*/
 int staticEval(Board* b) {
     //return an evaluation of the board
-    if (b->tied){
+    if (b->tied) {
         return 0;
     }
     else if (b->wonGame) {
-        //see who won
-        //std::cout << b->lastPlayer << " has won the game" << std::endl;
-        return b->lastPlayer == 'x' ? 10000000 : -10000000;
+        //see who played last move, they are the winner
+        return b->lastPlayer == 'x' ? INT_MAX : -INT_MAX;
     }
     else {
         //evaluate the given board position
-        //eval = 9* x3 + 3 * x2 + x1 - (3*o2 + o1 + 9 * 03)
-        //x3 num of big board boards won
-        //x2 num lines with 2 xs and a blank
-        //x1 num lines with 1 x and 2 blanks
-        //os ^^ but with os
-        int x3 = 0;
-        int o3 = 0;
         int x2 = 0;
         int o2 = 0;
         int o1 = 0;
         int x1 = 0;
-        int sumBB = 0;
-        //if there is a board won on bigBoard, add to sumBB
-        for (auto x = 0; x < __size; x++) {
-            for (auto y = 0; y < __size; y++) {
-                sumBB += b->bigBoard[y][x];
-            }
-        }
-        //sum rows
+
+        //sum rows and cols
         int sumR = 0;
+        int sumC = 0;
         for (auto x = 0; x < __size * __size; x++) {
             for (auto k = 0; k < __size; k++) {
-                sumR += b->rows[x][k];
+                sumR += b->rows[x][k] * (b->rowsCounter[x][k] % __size) * (b->rowsCounter[x][k] % __size);//favors 2 in a row, doesn't give points to __size filled no win
+                sumC += b->col[x][k] * (b->colCounter[x][k] % __size) * (b->colCounter[x][k] % __size);
             }
         }
-        //sum col
-        int sumC = 0;
-        for (auto y = 0; y < __size * __size; y++) {
-            for (auto k = 0; k < __size; k++) {
-                sumC += b->col[y][k];
-            }
+
+        //sum diagonals
+        int sumDiag = 0;
+        int sumADiag = 0;
+        for (auto it : b->diag) {
+            sumDiag += it.second * (b->diagCounter[it.first] % __size) * (b->diagCounter[it.first] % __size);
+        }
+        for (auto it : b->adiag) {
+            sumADiag += it.second * (b->adiagCounter[it.first] % __size) * (b->adiagCounter[it.first] % __size);
         }
 
         //sumBigRows
         int sumBR = 0;
-        for (auto y = 0; y < __size; y++) {
-            for (auto k = 0; k < __size; k++) {
-                sumBR += b->bigRow[y];
-            }
-        }
-
-        //sumBigCol
         int sumBC = 0;
         for (auto y = 0; y < __size; y++) {
             for (auto k = 0; k < __size; k++) {
-                sumBC += b->bigCol[y];
+                sumBR += b->bigRow[y] * (b->bigRowCounter[y] % __size) * (b->bigRowCounter[y] % __size);
+                sumBC += b->bigCol[y] * (b->bigColCounter[y] % __size) * (b->bigColCounter[y] % __size);
             }
-        }
-
-        int sumDiag = 0;
-        int sumADiag = 0;
-        for (auto it: b->diag) {
-            sumDiag += it.second;
-        }
-        for (auto it : b->adiag) {
-            sumADiag += it.second;
         }
 
         int sumBD = 0;
         int sumBAD = 0;
         for (auto it : b->bigAdiag) {
-            sumBAD += it;
+            sumBAD += it * (b->bigAdiagCounter % __size) * (b->bigAdiagCounter % __size);
         }
         for (auto it : b->bigDiag) {
-            sumBD += it;
+            sumBD += it * (b->bigDiagCounter % __size) * (b->bigDiagCounter % __size);
         }
 
-        //sum diags
-        //sum adiags
+
         o1 = min(0, sumR) + min(0, sumC) + min(sumDiag, 0) + min(sumADiag, 0);
         x1 = max(0, sumR) + max(0, sumC) + max(sumDiag, 0) + max(sumADiag, 0);
         o2 = min(0, sumBR) + min(0, sumBC) + min(0, sumBD) + min(0, sumBAD);
         x2 = max(0, sumBR) + max(0, sumBC) + max(0, sumBD) + max(0, sumBAD);
-        o3 = min(0, sumBB);
-        x3 = max(0, sumBB);
-        int eval = (18 * x3 + 3 * x2 + x1) + (18 * o3 + 3 * o2 + o1);
-        
+        int eval = (6 * x2 + x1) + (6 * o2 + o1);
+
         return  eval;
+
     }
 }
 
+/*
+* Implementation of the minimax algorithm with alpha beta pruning to sus out the
+* most optimal play for the ai player
+* 
+* @param: Board* position: the board state we are going to minimax
+* @param: int depth: the remaining depth we have
+* @param: int alpha: the alpha being considered for this board state
+* @param: int beta: the beta being considered for this board state
+* @param: bool maximizingPlayer: whether the current move is trying to max or min the evaluation
+* 
+* @return: the max or min (depending on bool) evaluation from all possible moves within depth, 
+*           i.e., the estimated best move in the current position
+* 
+* @NOTE: Eval function sucks so this isn't very good either
+*/
 int minimax(Board* position, int depth, int alpha, int beta, bool maximizingPlayer) {
     
     if (depth == 0 || position->wonGame || position->tied){
-        //return static eval of position
         //printBoard(position);
         int eval = staticEval(position);
         //std::cout << eval << std::endl;;
@@ -352,19 +340,27 @@ int minimax(Board* position, int depth, int alpha, int beta, bool maximizingPlay
     return 0;
 }
 
+/*
+* Update the user's gui to reflect the current boardstate and highlight the cell that
+* the user can play within
+* 
+* @param: int x: the last played x position
+* @param: int y: the last played y position
+* @param HWND hWnd: a handle to the window that will be drawn on
+*/
 void updateGUI(int x, int y, HWND hWnd) {
-    //Redraw the board to include the player's last move
-    // and to show the next square where the valid moves are
     int size = board.size;
     int h = board.h;
     int validX = board.validX;
     int validY = board.validY;
+    //rectangle that was played in
     RECT r1 = {};
     r1.left = x / size * h / size;
     r1.right = r1.left + (h / size);
     r1.top = y / size * h / size;
     r1.bottom = r1.top + (h / size);
     
+    //rectangle next player can play in
     RECT r2 = {};
     r2.left = validX * h / size;
     r2.right = r2.left + (h / size);
@@ -375,10 +371,16 @@ void updateGUI(int x, int y, HWND hWnd) {
     UpdateWindow(hWnd);
 }
 
+/*
+* Determine if there is a winner on the board, tell the user about it and ask for a rematch
+* 
+* @param: HWND hWnd: a handle to the window we are playing in
+* @param the rest are for calling windproc for reset
+*/
 void doWinProtocol(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if (board.wonGame) {
         //Draw the winner: player_one is x, not_player_one is o
-        auto winningMessage = board.player_one_turn ? L"Congratulations X, you have won!" : L"Congratulations X, you have won!";
+        auto winningMessage = !board.player_one_turn ? L"Congratulations X, you have won!" : L"Congratulations O, you have won!";
         int val = MessageBox(NULL, winningMessage, TEXT("Message"), MB_YESNO);
         switch (val) {
         case IDYES: {
@@ -405,19 +407,21 @@ void doWinProtocol(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     }
 }
 
-//Return the x and y that have the highest static evaluation score
-//AI WANTS TO MINIMIZE
-//FOR NOW, just loop through all possibilities
-void AITurn(HWND hWnd, int* bestX, int* bestY) {
-    int bestEval = 10000000;
-    //Can make this loop faster using validX and validY
+/*
+* Have the AI minimax the current board position and find the minimizing move
+* 
+* @param: int* x: pointer that will be filled by the best available x move (acc to minimax)
+* @param: int* y: pointer that will be filled by the best available y move (acc to minimax)
+*/
+void AITurn(int* bestX, int* bestY) {
+    int bestEval = INT_MAX;
     for (auto x = 0; x < (board.size * board.size); x++) {
         for (auto y = 0; y < (board.size * board.size); y++) {
             if (board.validMove(x, y)) {
-                
                 Board tmpB = board;
                 tmpB.makeTurn(x, y);
-                int eval = minimax(&tmpB, 9, -1000000, 1000000, false);
+                
+                int eval = minimax(&tmpB, aiDepth, -INT_MAX, INT_MAX, false);
                 std::cout << eval << std::endl;
                 if (eval < bestEval) {
                     bestEval = eval;
@@ -437,8 +441,7 @@ void AITurn(HWND hWnd, int* bestX, int* bestY) {
 * WM_DESTROY  - post a quit message and return
 * WM_LBUTTONDOWN - handle user left clicks
 */
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     PAINTSTRUCT ps;
     HDC hdc;
     switch (message) {
@@ -459,25 +462,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         // x y pair where x is horizontal and y is vertical
         int x = curPos.x / (500 / (board.size * board.size));
         int y = curPos.y / (500 / (board.size * board.size));
+
         if (board.makeTurn(x, y)) {
-            moves++;
             doWinProtocol(hWnd, message, wParam, lParam);
-         }
+            moves++;
+        }
         else {
             break;
         }
         updateGUI(x, y, hWnd);
-        
-        AITurn(hWnd, &x, &y);
+
+        AITurn(&x, &y);
         if (board.makeTurn(x, y)) {
-            moves++;
             doWinProtocol(hWnd, message, wParam, lParam);
+            moves++;
         }
         updateGUI(x, y, hWnd);
 
-    }
         break;
-
+    }
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
         break;
