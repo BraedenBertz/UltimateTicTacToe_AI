@@ -1,4 +1,6 @@
 # UltimateTicTacToe_AI
-ultimate tic tac toe with ai that uses minimax with alpha beta pruning to do an estimated best move
-My evaluation method is kinda trash, but can beat me most of the time; minimax isn't ideal for larger n, so 
-TODO: implement Monte Carlo Tree Searching
+•Interactive N by N Ultimate Tic-Tac-Toe gameboard in windows C++ with constant time board win evaluation
+
+•Minimax depth first search with alpha beta pruning achieved 8/10 successes against expert level online ai
+
+TODO: Implement MCST for evaluations
